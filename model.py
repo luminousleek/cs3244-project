@@ -1,11 +1,16 @@
+from os.path import exists
+
 from torch import torch, nn
+from torchvision import models
+
 from dataset import JobPostingDataSet
 from torchtext.data.utils import get_tokenizer
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
-filename = 'cleaned_job_postings.csv'
+dataset_file = 'cleaned_job_postings.csv'
+model_file = 'model_weights.pth'
 tokenizer = get_tokenizer('basic_english')
-dataset = JobPostingDataSet(filename)
+dataset = JobPostingDataSet(dataset_file)
 vocab = dataset.vocab_list.get('combined_description')
 
 
@@ -47,3 +52,15 @@ class TextClassificationModel(nn.Module):
     def forward(self, text, offsets):
         embedded = self.embedding(text, offsets)
         return self.fc(embedded)
+
+
+def save_model(model):
+    torch.save(model, model_file)
+
+
+def load_model():
+    if not exists(model_file):
+        return None
+
+    model = torch.load(model_file)
+    return model
