@@ -1,11 +1,12 @@
+import copy
 import time
 from os.path import exists
 
 from torch import torch
-from torch.utils.data import DataLoader, random_split
+from torch.utils.data import DataLoader, random_split, ConcatDataset
 
 from dataset import JobPostingDataSet
-from model import collate_batch, dataset, device, TextClassificationModel, save_model, load_model
+from model import collate_batch, dataset as ds, device, TextClassificationModel, save_model, load_model
 
 
 def train(dataloader, model, epoch):
@@ -62,6 +63,10 @@ def predict(file_path, model):
             total_acc += (predicted_label.argmax(1) == label).sum().item()
             total_count += label.size(0)
 
+    acc_result = total_acc / total_count
+    print(f'prediction accuracy: {acc_result:.3f}')
+    return acc_result
+
 
 def predict_instance(model, text, _text_pipeline):
     # output 0 or 1 for real or fake respectively
@@ -71,21 +76,21 @@ def predict_instance(model, text, _text_pipeline):
         return output.argmax(1).item()
 
 
-def rest_LR():
+def rest_LR(model):
     global optimizer, scheduler
-    optimizer = torch.optim.SGD(tc_model.parameters(), lr=LR)
+    optimizer = torch.optim.SGD(model.parameters(), lr=LR)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.1)
 
 
-def train_valid_test(_train_dataloader, _valid_dataloader, _test_dataloader):
+def train_valid_test(model, _train_dataloader, _valid_dataloader, _test_dataloader):
     # perform one cycle of training (multiple batches), validation and test
-    total_accu = None
-    rest_LR()
+    total_accu = 0
+    rest_LR(model)
 
     for epoch in range(1, EPOCHS + 1):
         epoch_start_time = time.time()
-        train(_train_dataloader, tc_model, epoch)
-        accu_val = evaluate(_valid_dataloader, tc_model)
+        train(_train_dataloader, model, epoch)
+        accu_val = evaluate(_valid_dataloader, model)
         if total_accu is not None and total_accu > accu_val:
             scheduler.step()
         else:
@@ -97,14 +102,17 @@ def train_valid_test(_train_dataloader, _valid_dataloader, _test_dataloader):
                                                accu_val))
         print('-' * 59)
 
-        print('Checking the results of test dataset.')
-        accu_test = evaluate(_test_dataloader, tc_model)
-        print('test accuracy {:8.3f}'.format(accu_test))
+    print('Checking the results of test dataset.')
+    accu_test = evaluate(_test_dataloader, model)
+    print('test accuracy {:8.3f}'.format(accu_test))
+
+    return accu_test
 
 
-def simple_trainer(_dataset, _model, to_save=False):
-    num_test = int(len(_dataset) * test_ratio)
-    train_dataset, test_dataset = random_split(_dataset, [len(_dataset) - num_test, num_test])
+def simple_trainer(dataset, model, to_save=False):
+    # simple training by splitting dataset into training, validation and testing
+    num_test = int(len(dataset) * test_ratio)
+    train_dataset, test_dataset = random_split(dataset, [len(dataset) - num_test, num_test])
     num_train = int(len(train_dataset) * train_ratio)
     split_train_, split_valid_ = random_split(train_dataset, [num_train, len(train_dataset) - num_train])
 
@@ -112,18 +120,47 @@ def simple_trainer(_dataset, _model, to_save=False):
     valid_dataloader = DataLoader(split_valid_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
     test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
 
-    train_valid_test(train_dataloader, valid_dataloader, test_dataloader)
+    train_valid_test(model, train_dataloader, valid_dataloader, test_dataloader)
 
     if to_save:
-        save_model(_model)
+        save_model(model)
+
+
+def k_folds_trainer(dataset, model, k, to_save=False):
+    # k-folds training, model with the best accuracy is saved
+    fold_size = int(len(dataset) / k)
+    folds = random_split(dataset, [fold_size] * k)
+    max_model = 0, None
+
+    for idx, fold in enumerate(folds):
+        print('-' * 59)
+        print(f'Fold {idx + 1}')
+
+        temp_model = copy.deepcopy(model)
+        test_dataset = fold
+        train_dataset = ConcatDataset([f for f in folds if f != fold])
+        num_train = int(len(train_dataset) * train_ratio)
+        split_train_, split_valid_ = random_split(train_dataset, [num_train, len(train_dataset) - num_train])
+
+        train_dataloader = DataLoader(split_train_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
+        valid_dataloader = DataLoader(split_valid_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
+        test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
+
+        acc = train_valid_test(temp_model, train_dataloader, valid_dataloader, test_dataloader)
+        max_model = max(max_model, (acc, temp_model), key=lambda x: x[0])
+
+    if to_save:
+        save_model(max_model[1])
 
 
 # TextClassificationModel variables
 num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
-vocab = dataset.vocab_list.get('combined_description')
+vocab = ds.vocab_list.get('combined_description')
 vocab_size = len(vocab)
 emsize = 128
 
+# will load from previous model from model_weights.pth
+# delete model_weights.pth to train from new model
 tc_model = load_model()
 if not tc_model:
     print('new model created')
@@ -145,4 +182,5 @@ criterion = torch.nn.CrossEntropyLoss()
 optimizer = torch.optim.SGD(tc_model.parameters(), lr=LR)
 scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.1)
 
-simple_trainer(dataset, tc_model, to_save=True)
+k_folds_trainer(ds, tc_model, k=10, to_save=True)
+predict('random_sample.csv', tc_model)
