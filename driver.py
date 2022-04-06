@@ -5,11 +5,11 @@ from os.path import exists
 from torch import torch
 from torch.utils.data import DataLoader, random_split, ConcatDataset
 
-from dataset import JobPostingDataSet
+from dataset import JobPostingDataSet, build_vocab
 from model import collate_batch, dataset as ds, device, TextClassificationModel, save_model, load_model
 
 
-def train(dataloader, model, epoch):
+def train(dataloader, model, optimizer, epoch):
     model.train()
     total_acc, total_count = 0, 0
     log_interval = 500
@@ -46,14 +46,20 @@ def evaluate(dataloader, model):
     return total_acc / total_count
 
 
-def predict(file_path, model):
+def predict(file_path):
+    model = initialise_model()
+    if model is None:
+        print('unable to load model')
+        return
+
     model.eval()
     if not exists(file_path):
         print(f'{file_path} does not exists')
         return None
 
     predict_dataset = JobPostingDataSet(file_path)
-    dataloader = DataLoader(predict_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
+    vocab = build_vocab(predict_dataset)
+    dataloader = DataLoader(predict_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
 
     total_acc, total_count = 0, 0
     with torch.no_grad():
@@ -76,20 +82,20 @@ def predict_instance(model, text, _text_pipeline):
         return output.argmax(1).item()
 
 
-def rest_LR(model):
-    global optimizer, scheduler
+def get_optimizer_scheduler(model):
     optimizer = torch.optim.SGD(model.parameters(), lr=LR)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.1)
+    return optimizer, scheduler
 
 
 def train_valid_test(model, _train_dataloader, _valid_dataloader, _test_dataloader):
     # perform one cycle of training (multiple batches), validation and test
     total_accu = 0
-    rest_LR(model)
+    optimizer, scheduler = get_optimizer_scheduler(model)
 
     for epoch in range(1, EPOCHS + 1):
         epoch_start_time = time.time()
-        train(_train_dataloader, model, epoch)
+        train(_train_dataloader, model, optimizer, epoch)
         accu_val = evaluate(_valid_dataloader, model)
         if total_accu is not None and total_accu > accu_val:
             scheduler.step()
@@ -109,16 +115,36 @@ def train_valid_test(model, _train_dataloader, _valid_dataloader, _test_dataload
     return accu_test
 
 
-def simple_trainer(dataset, model, to_save=False):
+def initialise_model(vocab_size=None):
+    # will load from previous model from model_weights.pth
+    # delete model_weights.pth to train from new model
+    tc_model = load_model()
+    if not tc_model:
+        if vocab_size is None:
+            print('no model returned')
+            return None
+
+        print('new model created')
+        tc_model = TextClassificationModel(vocab_size, emsize, num_class).to(device)
+    else:
+        print('model loaded')
+
+    return tc_model
+
+
+def simple_trainer(dataset, to_save=False):
     # simple training by splitting dataset into training, validation and testing
     num_test = int(len(dataset) * test_ratio)
     train_dataset, test_dataset = random_split(dataset, [len(dataset) - num_test, num_test])
     num_train = int(len(train_dataset) * train_ratio)
     split_train_, split_valid_ = random_split(train_dataset, [num_train, len(train_dataset) - num_train])
 
-    train_dataloader = DataLoader(split_train_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
-    valid_dataloader = DataLoader(split_valid_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
-    test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
+    vocab = build_vocab(train_dataset)
+    model = initialise_model(len(vocab))
+
+    train_dataloader = DataLoader(split_train_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
+    valid_dataloader = DataLoader(split_valid_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
+    test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
 
     train_valid_test(model, train_dataloader, valid_dataloader, test_dataloader)
 
@@ -126,25 +152,34 @@ def simple_trainer(dataset, model, to_save=False):
         save_model(model)
 
 
-def k_folds_trainer(dataset, model, k, to_save=False):
+def k_folds_trainer(dataset, k, to_save=False):
     # k-folds training, model with the best accuracy is saved
     fold_size = int(len(dataset) / k)
     folds = random_split(dataset, [fold_size] * k)
     max_model = 0, None
+    loaded_model = initialise_model()
 
     for idx, fold in enumerate(folds):
         print('-' * 59)
         print(f'Fold {idx + 1}')
 
-        temp_model = copy.deepcopy(model)
         test_dataset = fold
         train_dataset = ConcatDataset([f for f in folds if f != fold])
         num_train = int(len(train_dataset) * train_ratio)
         split_train_, split_valid_ = random_split(train_dataset, [num_train, len(train_dataset) - num_train])
 
-        train_dataloader = DataLoader(split_train_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
-        valid_dataloader = DataLoader(split_valid_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
-        test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch)
+        vocab = build_vocab(train_dataset)
+        if loaded_model is None:
+            temp_model = initialise_model(len(vocab))
+        else:
+            temp_model = copy.deepcopy(loaded_model)
+
+        train_dataloader = DataLoader(split_train_, batch_size=BATCH_SIZE,
+                                      shuffle=True, collate_fn=collate_batch(vocab))
+        valid_dataloader = DataLoader(split_valid_, batch_size=BATCH_SIZE,
+                                      shuffle=True, collate_fn=collate_batch(vocab))
+        test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE,
+                                     shuffle=True, collate_fn=collate_batch(vocab))
 
         acc = train_valid_test(temp_model, train_dataloader, valid_dataloader, test_dataloader)
         max_model = max(max_model, (acc, temp_model), key=lambda x: x[0])
@@ -155,18 +190,7 @@ def k_folds_trainer(dataset, model, k, to_save=False):
 
 # TextClassificationModel variables
 num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
-vocab = ds.vocab_list.get('combined_description')
-vocab_size = len(vocab)
 emsize = 128
-
-# will load from previous model from model_weights.pth
-# delete model_weights.pth to train from new model
-tc_model = load_model()
-if not tc_model:
-    print('new model created')
-    tc_model = TextClassificationModel(vocab_size, emsize, num_class).to(device)
-else:
-    print('model loaded')
 
 job_label = {0: 'Real', 1: 'Fake'}
 
@@ -177,10 +201,7 @@ BATCH_SIZE = 64  # batch size for training
 test_ratio = 0.1
 train_ratio = 0.95
 
-# Model Training Functions
 criterion = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(tc_model.parameters(), lr=LR)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.1)
 
-k_folds_trainer(ds, tc_model, k=10, to_save=True)
-predict('random_sample.csv', tc_model)
+k_folds_trainer(ds, k=20, to_save=True)
+predict('random_sample.csv')
