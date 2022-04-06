@@ -17,9 +17,7 @@ def build_vocab(df):
 
 
 def combine_descriptions(df):
-    df['combined_description'] = ''
-    for feature in features_to_use:
-        df['combined_description'] += ' ' + df[feature]
+    df['combined_description'] = df[features_to_use].apply(lambda row: " ".join(row.values.astype(str)), axis=1)
 
 
 class JobPostingDataSet(Dataset):
@@ -33,7 +31,6 @@ class JobPostingDataSet(Dataset):
 
     def __getitem__(self, idx):
         temp = self.job_postings.iloc[idx].to_dict()
-        label = temp.get("fraudulent")
-
-        text = ' '.join(list(map(lambda x: str(temp.get(x)), features_to_use)))
+        label = temp.get('fraudulent')
+        text = temp.get('combined_description')
         return text, label

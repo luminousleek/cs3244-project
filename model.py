@@ -1,7 +1,6 @@
 from os.path import exists
 
 from torch import torch, nn
-from torchvision import models
 
 from dataset import JobPostingDataSet
 from torchtext.data.utils import get_tokenizer
