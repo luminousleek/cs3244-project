@@ -153,34 +153,39 @@ def k_folds_trainer(dataset, model, k, to_save=False):
         save_model(max_model[1])
 
 
-# TextClassificationModel variables
-num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
-vocab = ds.vocab_list.get('combined_description')
-vocab_size = len(vocab)
-emsize = 128
 
-# will load from previous model from model_weights.pth
-# delete model_weights.pth to train from new model
-tc_model = load_model()
-if not tc_model:
-    print('new model created')
-    tc_model = TextClassificationModel(vocab_size, emsize, num_class).to(device)
-else:
-    print('model loaded')
 
-job_label = {0: 'Real', 1: 'Fake'}
+def main():
+    # TextClassificationModel variables
+    num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
+    vocab = ds.vocab_list.get('combined_description')
+    vocab_size = len(vocab)
+    emsize = 128
 
-# Hyperparameters
-EPOCHS = 10  # epoch
-LR = 5  # learning rate
-BATCH_SIZE = 64  # batch size for training
-test_ratio = 0.1
-train_ratio = 0.95
+    # will load from previous model from model_weights.pth
+    # delete model_weights.pth to train from new model
+    tc_model = load_model()
+    if not tc_model:
+        print('new model created')
+        tc_model = TextClassificationModel(vocab_size, emsize, num_class).to(device)
+    else:
+        print('model loaded')
+        job_label = {0: 'Real', 1: 'Fake'}
 
-# Model Training Functions
-criterion = torch.nn.CrossEntropyLoss()
-optimizer = torch.optim.SGD(tc_model.parameters(), lr=LR)
-scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.1)
+    # Hyperparameters
+    EPOCHS = 10  # epoch
+    LR = 5  # learning rate
+    BATCH_SIZE = 64  # batch size for training
+    test_ratio = 0.1
+    train_ratio = 0.95
 
-k_folds_trainer(ds, tc_model, k=10, to_save=True)
-predict('random_sample.csv', tc_model)
+    # Model Training Functions
+    criterion = torch.nn.CrossEntropyLoss()
+    optimizer = torch.optim.SGD(tc_model.parameters(), lr=LR)
+    scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.1)
+
+    k_folds_trainer(ds, tc_model, k=10, to_save=True)
+    predict('random_sample.csv', tc_model)
+
+if __name__ == "__main__":
+    main()
