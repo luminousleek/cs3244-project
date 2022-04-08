@@ -5,6 +5,8 @@ from os.path import exists
 from torch import torch
 from torch.utils.data import DataLoader, random_split, ConcatDataset
 
+import torchmetrics
+
 from dataset import JobPostingDataSet
 from model import collate_batch, dataset as ds, device, TextClassificationModel, save_model, load_model
 
@@ -47,6 +49,7 @@ def evaluate(dataloader, model):
 
 
 def predict(file_path, model):
+    print("Attempting prediction on given file using the following model: ")
     model.eval()
     if not exists(file_path):
         print(f'{file_path} does not exists')
@@ -57,14 +60,22 @@ def predict(file_path, model):
 
     total_acc, total_count = 0, 0
     with torch.no_grad():
+        #accuracy = torchmetrics.Accuracy().to(torch.device("cuda", 0))
+        f1 = torchmetrics.F1Score().to(torch.device("cuda", 0))
         for label, text, offsets in dataloader:
             predicted_label = model(text, offsets)
             criterion(predicted_label, label)
+            labels = torch.argmax(predicted_label, 1)
+            #acc_score = accuracy(labels, label)
+            f1_score = f1(labels, label)
             total_acc += (predicted_label.argmax(1) == label).sum().item()
             total_count += label.size(0)
 
     acc_result = total_acc / total_count
     print(f'prediction accuracy: {acc_result:.3f}')
+    #acc_score = accuracy.compute()
+    f1_score = f1.compute()
+    print(f"The F1 score is {f1_score}")
     return acc_result
 
 
@@ -152,9 +163,6 @@ def k_folds_trainer(dataset, model, k, to_save=False):
     if to_save:
         save_model(max_model[1])
 
-
-
-
 def main():
     # TextClassificationModel variables
     num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
@@ -170,9 +178,10 @@ def main():
         tc_model = TextClassificationModel(vocab_size, emsize, num_class).to(device)
     else:
         print('model loaded')
-        job_label = {0: 'Real', 1: 'Fake'}
+    job_label = {0: 'Real', 1: 'Fake'}
 
     # Hyperparameters
+    global EPOCHS, LR, BATCH_SIZE, test_ratio, train_ratio
     EPOCHS = 10  # epoch
     LR = 5  # learning rate
     BATCH_SIZE = 64  # batch size for training
@@ -180,6 +189,7 @@ def main():
     train_ratio = 0.95
 
     # Model Training Functions
+    global criterion, optimizer, scheduler
     criterion = torch.nn.CrossEntropyLoss()
     optimizer = torch.optim.SGD(tc_model.parameters(), lr=LR)
     scheduler = torch.optim.lr_scheduler.StepLR(optimizer, 1, gamma=0.1)
