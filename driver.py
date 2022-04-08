@@ -8,6 +8,10 @@ from torch.utils.data import DataLoader, random_split, ConcatDataset
 from dataset import JobPostingDataSet
 from model import collate_batch, dataset as ds, device, TextClassificationModel, save_model, load_model
 
+import wandb
+
+wandb.init(project="cs3244-project", entity="isaacleexj")
+
 
 def train(dataloader, model, epoch):
     model.train()
@@ -19,6 +23,7 @@ def train(dataloader, model, epoch):
         optimizer.zero_grad()
         predicted_label = model(text, offsets)
         loss = criterion(predicted_label, label)
+        wandb.log({"loss": loss})
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
         optimizer.step()
@@ -172,10 +177,17 @@ job_label = {0: 'Real', 1: 'Fake'}
 
 # Hyperparameters
 EPOCHS = 10  # epoch
-LR = 5  # learning rate
+LR = 1  # learning rate
 BATCH_SIZE = 64  # batch size for training
 test_ratio = 0.1
 train_ratio = 0.95
+
+wandb.config = {
+  "data": "combined_descriptions",
+  "learning_rate": LR,
+  "epochs": EPOCHS,
+  "batch_size": BATCH_SIZE
+}
 
 # Model Training Functions
 criterion = torch.nn.CrossEntropyLoss()
