@@ -1,5 +1,5 @@
 from os.path import exists
-
+import sys
 from torch import torch, nn
 
 from dataset import JobPostingDataSet
@@ -7,10 +7,10 @@ from torchtext.data.utils import get_tokenizer
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dataset_file = 'cleaned_job_postings.csv'
-model_file = 'model_weights.pth'
+model_file = 'model_weights_desc_lr_point_five.pth'
 tokenizer = get_tokenizer('basic_english')
 dataset = JobPostingDataSet(dataset_file)
-vocab = dataset.vocab_list.get('combined_description')
+vocab = dataset.vocab_list.get('description')
 
 
 def text_pipeline(text: str):
