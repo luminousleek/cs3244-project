@@ -47,7 +47,7 @@ def evaluate(dataloader, model):
 
 
 def predict(file_path):
-    model = initialise_model()
+    model, vocab = initialise_model()
     if model is None:
         print('unable to load model')
         return
@@ -58,7 +58,6 @@ def predict(file_path):
         return None
 
     predict_dataset = JobPostingDataSet(file_path)
-    vocab = build_vocab(predict_dataset)
     dataloader = DataLoader(predict_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
 
     total_acc, total_count = 0, 0
@@ -118,18 +117,19 @@ def train_valid_test(model, _train_dataloader, _valid_dataloader, _test_dataload
 def initialise_model(vocab_size=None):
     # will load from previous model from model_weights.pth
     # delete model_weights.pth to train from new model
-    tc_model = load_model()
+    tc_model, vocab = load_model()
     if not tc_model:
         if vocab_size is None:
             print('no model returned')
-            return None
+            return None, None
 
         print('new model created')
         tc_model = TextClassificationModel(vocab_size, emsize, num_class).to(device)
+        vocab = None
     else:
         print('model loaded')
 
-    return tc_model
+    return tc_model, vocab
 
 
 def simple_trainer(dataset, to_save=False):
@@ -140,7 +140,7 @@ def simple_trainer(dataset, to_save=False):
     split_train_, split_valid_ = random_split(train_dataset, [num_train, len(train_dataset) - num_train])
 
     vocab = build_vocab(train_dataset)
-    model = initialise_model(len(vocab))
+    model, _ = initialise_model(len(vocab))
 
     train_dataloader = DataLoader(split_train_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
     valid_dataloader = DataLoader(split_valid_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
@@ -156,8 +156,8 @@ def k_folds_trainer(dataset, k, to_save=False):
     # k-folds training, model with the best accuracy is saved
     fold_size = int(len(dataset) / k)
     folds = random_split(dataset, [fold_size] * k)
-    max_model = 0, None
-    loaded_model = initialise_model()
+    max_model = 0, None, None
+    loaded_model, _ = initialise_model()
 
     for idx, fold in enumerate(folds):
         print('-' * 59)
@@ -170,7 +170,7 @@ def k_folds_trainer(dataset, k, to_save=False):
 
         vocab = build_vocab(train_dataset)
         if loaded_model is None:
-            temp_model = initialise_model(len(vocab))
+            temp_model, _ = initialise_model(len(vocab))
         else:
             temp_model = copy.deepcopy(loaded_model)
 
@@ -182,10 +182,10 @@ def k_folds_trainer(dataset, k, to_save=False):
                                      shuffle=True, collate_fn=collate_batch(vocab))
 
         acc = train_valid_test(temp_model, train_dataloader, valid_dataloader, test_dataloader)
-        max_model = max(max_model, (acc, temp_model), key=lambda x: x[0])
+        max_model = max(max_model, (acc, temp_model, vocab), key=lambda x: x[0])
 
     if to_save:
-        save_model(max_model[1])
+        save_model(max_model[1:])
 
 
 # TextClassificationModel variables
@@ -198,10 +198,10 @@ job_label = {0: 'Real', 1: 'Fake'}
 EPOCHS = 10  # epoch
 LR = 5  # learning rate
 BATCH_SIZE = 64  # batch size for training
-test_ratio = 0.1
-train_ratio = 0.95
+test_ratio = 0.4
+train_ratio = 0.6
 
 criterion = torch.nn.CrossEntropyLoss()
 
-k_folds_trainer(ds, k=20, to_save=True)
+# k_folds_trainer(ds, k=10, to_save=True)
 predict('random_sample.csv')

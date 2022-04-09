@@ -3,11 +3,13 @@ from os.path import exists
 from torch import torch, nn
 
 from dataset import JobPostingDataSet
+from torchtext.vocab import build_vocab_from_iterator
 from torchtext.data.utils import get_tokenizer
 
 device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
 dataset_file = 'cleaned_job_postings.csv'
 model_file = 'model_weights.pth'
+vocab_file = 'vocab.txt'
 tokenizer = get_tokenizer('basic_english')
 dataset = JobPostingDataSet(dataset_file)
 
@@ -56,12 +58,27 @@ class TextClassificationModel(nn.Module):
 
 
 def save_model(model):
-    torch.save(model, model_file)
+    torch.save(model[0], model_file)
+
+    with open(vocab_file, 'w+', encoding='utf-8') as f:
+        for token, index in model[1].get_stoi().items():
+            f.write(f'{index}\t{token}\n')
 
 
 def load_model():
     if not exists(model_file):
-        return None
+        return None, None
 
     model = torch.load(model_file)
-    return model
+    v_list = []
+    with open(vocab_file, 'r', encoding='utf-8') as f:
+        for line in f.readlines():
+            index, token = line.split('\t')
+            v_list.append(token.strip("\n"))
+
+    def yield_vocab(vl):
+        yield vl
+
+    voc = build_vocab_from_iterator(yield_vocab(v_list))
+    voc.set_default_index(voc["<unk>"])
+    return model, voc

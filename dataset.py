@@ -4,7 +4,7 @@ from torchtext.data import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
 
-features_to_use = ['company_profile', 'description', 'requirements']
+features_to_use = ['company_profile', 'description', 'requirements', 'benefits']
 tokenizer = get_tokenizer('basic_english')
 
 
