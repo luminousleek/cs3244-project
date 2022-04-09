@@ -70,14 +70,16 @@ def predict(file_path):
 
     acc_result = total_acc / total_count
     print(f'prediction accuracy: {acc_result:.3f}')
+
     return acc_result
 
 
 def predict_instance(model, text, _text_pipeline):
     # output 0 or 1 for real or fake respectively
+
     with torch.no_grad():
-        text = torch.tensor(_text_pipeline(text))
-        output = model(text, torch.tensor([0]))
+        text = torch.tensor(_text_pipeline(text, model[1]))
+        output = model[0](text, torch.tensor([0]))
         return output.argmax(1).item()
 
 
@@ -124,18 +126,20 @@ def initialise_model(vocab_size=None):
             return None, None
 
         print('new model created')
-        tc_model = TextClassificationModel(vocab_size, emsize, num_class).to(device)
+        tc_model = TextClassificationModel(vocab_size, em_size, num_class)
         vocab = None
     else:
         print('model loaded')
 
-    return tc_model, vocab
+    return tc_model.to(device), vocab
 
 
 def simple_trainer(dataset, to_save=False):
     # simple training by splitting dataset into training, validation and testing
-    num_test = int(len(dataset) * test_ratio)
-    train_dataset, test_dataset = random_split(dataset, [len(dataset) - num_test, num_test])
+    f_ds, t_ds = dataset
+    ft_ds = ConcatDataset([f_ds, t_ds])
+    num_test = int(len(ft_ds) * test_ratio)
+    train_dataset, test_dataset = random_split(ft_ds, [len(ft_ds) - num_test, num_test])
     num_train = int(len(train_dataset) * train_ratio)
     split_train_, split_valid_ = random_split(train_dataset, [num_train, len(train_dataset) - num_train])
 
@@ -149,26 +153,37 @@ def simple_trainer(dataset, to_save=False):
     train_valid_test(model, train_dataloader, valid_dataloader, test_dataloader)
 
     if to_save:
-        save_model(model)
+        save_model((model, vocab))
 
 
 def k_folds_trainer(dataset, k, to_save=False):
     # k-folds training, model with the best accuracy is saved
-    fold_size = int(len(dataset) / k)
-    folds = random_split(dataset, [fold_size] * k)
+    if k == 1:
+        return simple_trainer(dataset, to_save)
+
+    f_ds, t_ds = dataset
+    ft_ratio = 1
+    fold_size = int(len(f_ds) / k)
+    f_rest, t_rest = len(f_ds) - fold_size * k, len(t_ds) - fold_size * k * ft_ratio
+
+    f_folds = random_split(f_ds, [fold_size] * k + [f_rest])
+    t_folds = random_split(t_ds, [fold_size * ft_ratio] * k + [t_rest])
+    f_folds.pop()
+    t_folds.pop()
+
     max_model = 0, None, None
     loaded_model, _ = initialise_model()
 
-    for idx, fold in enumerate(folds):
+    for idx, fold in enumerate(tuple(zip(f_folds, t_folds))):
         print('-' * 59)
         print(f'Fold {idx + 1}')
 
-        test_dataset = fold
-        train_dataset = ConcatDataset([f for f in folds if f != fold])
+        test_dataset = ConcatDataset([fold[0]] + [fold[1]])
+        train_dataset = ConcatDataset([f for f in f_folds if f != fold[0]] + [f for f in t_folds if f != fold[1]])
         num_train = int(len(train_dataset) * train_ratio)
         split_train_, split_valid_ = random_split(train_dataset, [num_train, len(train_dataset) - num_train])
 
-        vocab = build_vocab(train_dataset)
+        vocab = build_vocab(split_train_)
         if loaded_model is None:
             temp_model, _ = initialise_model(len(vocab))
         else:
@@ -190,7 +205,7 @@ def k_folds_trainer(dataset, k, to_save=False):
 
 # TextClassificationModel variables
 num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
-emsize = 128
+em_size = 128
 
 job_label = {0: 'Real', 1: 'Fake'}
 
@@ -199,9 +214,13 @@ EPOCHS = 10  # epoch
 LR = 5  # learning rate
 BATCH_SIZE = 64  # batch size for training
 test_ratio = 0.4
-train_ratio = 0.6
+train_ratio = 0.8
 
 criterion = torch.nn.CrossEntropyLoss()
 
-# k_folds_trainer(ds, k=10, to_save=True)
-predict('random_sample.csv')
+k_folds_trainer(ds, k=30, to_save=True)
+
+predict('fake_job_postings.csv')
+predict('local_job_postings.csv')
+predict('fake_postings_only.csv')
+

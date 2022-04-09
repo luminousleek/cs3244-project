@@ -3,18 +3,36 @@ from torch.utils.data import Dataset
 from torchtext.data import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
-
-features_to_use = ['company_profile', 'description', 'requirements', 'benefits']
+boolean_features = ['has_company_logo', 'has_questions']
+small_features = ['required_experience', 'required_education', 'function']
+long_features = ['description']
 tokenizer = get_tokenizer('basic_english')
 
 
+def split_data(file_path):
+    df = pandas.read_csv(file_path)
+    fjp = df.copy(True).drop(df[df['fraudulent'] == 0].index)
+    tjp = df.copy(True).drop(df[df['fraudulent'] == 1].index)
+    return JobPostingDataSet(dataset=fjp), JobPostingDataSet(dataset=tjp)
+
+
 def combine_descriptions(df):
-    df['combined_description'] = df[features_to_use].apply(lambda row: " ".join(row.values.astype(str)), axis=1)
+    df['temp1'] = df[boolean_features].apply(lambda row: "__".join(row.values.astype(str)), axis=1)
+    df['temp2'] = ''
+    for feature in long_features:
+        df['temp2'] = df['temp2'] + " " + df[feature].apply(lambda x: " ".join(str(x).split(" ")[:30]))
+    df['combined_description'] = df[['temp1', 'temp2'] + small_features].apply(lambda row: " ".join(row.values.astype(str)), axis=1)
+    df.drop(['temp1', 'temp2'], axis=1, inplace=True)
 
 
 class JobPostingDataSet(Dataset):
-    def __init__(self, filename):
-        self.job_postings = pandas.read_csv(filename)
+    def __init__(self, filename=None, dataset=None):
+        if filename is None and dataset is None:
+            raise RuntimeError("provide file name or pandas dataset")
+        if dataset is not None:
+            self.job_postings = dataset
+        else:
+            self.job_postings = pandas.read_csv(filename)
         combine_descriptions(self.job_postings)
 
     def __len__(self):

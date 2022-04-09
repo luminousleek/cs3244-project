@@ -2,16 +2,16 @@ from os.path import exists
 
 from torch import torch, nn
 
-from dataset import JobPostingDataSet
+from dataset import split_data
 from torchtext.vocab import build_vocab_from_iterator
 from torchtext.data.utils import get_tokenizer
 
-device = torch.device('cuda' if torch.cuda.is_available() else 'cpu')
+device = 'cpu'
 dataset_file = 'cleaned_job_postings.csv'
 model_file = 'model_weights.pth'
 vocab_file = 'vocab.txt'
 tokenizer = get_tokenizer('basic_english')
-dataset = JobPostingDataSet(dataset_file)
+dataset = split_data(dataset_file)
 
 
 def text_pipeline(text: str, vocab):
@@ -49,8 +49,6 @@ class TextClassificationModel(nn.Module):
     def init_weights(self):
         initrange = 0.5
         self.embedding.weight.data.uniform_(-initrange, initrange)
-        self.fc.weight.data.uniform_(-initrange, initrange)
-        self.fc.bias.data.zero_()
 
     def forward(self, text, offsets):
         embedded = self.embedding(text, offsets)
