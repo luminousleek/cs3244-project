@@ -9,6 +9,9 @@ __pycache__/
 # datasets
 *.csv
 
+# model weights
+model_weights.pth
+
 # C extensions
 *.so
 

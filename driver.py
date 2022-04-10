@@ -6,6 +6,8 @@ from torch import torch
 from torch.utils.data import DataLoader, random_split, ConcatDataset
 
 from dataset import JobPostingDataSet, build_vocab
+import torchmetrics
+
 from model import collate_batch, dataset as ds, device, TextClassificationModel, save_model, load_model
 
 
@@ -57,9 +59,17 @@ def predict_with_model(file_path, model, vocab, to_train=True):
 
     total_acc, total_count = 0, 0
     with torch.no_grad():
+        # accuracy = torchmetrics.Accuracy().to(torch.device("cuda", 0))
+        f1 = torchmetrics.F1Score().to(torch.device("cuda", 0))
+
         for label, text, offsets in dataloader:
             predicted_label = model(text, offsets)
             criterion(predicted_label, label)
+
+            labels = torch.argmax(predicted_label, 1)
+            # acc_score = accuracy(labels, label)
+            f1_score = f1(labels, label)
+
             total_acc += (predicted_label.argmax(1) == label).sum().item()
             total_count += label.size(0)
 
@@ -87,15 +97,26 @@ def predict(file_path):
 
     total_acc, total_count = 0, 0
     with torch.no_grad():
+        # accuracy = torchmetrics.Accuracy().to(torch.device("cuda", 0))
+        f1 = torchmetrics.F1Score().to(torch.device("cuda", 0))
+
         for label, text, offsets in dataloader:
             predicted_label = model(text, offsets)
             criterion(predicted_label, label)
+
+            labels = torch.argmax(predicted_label, 1)
+            # acc_score = accuracy(labels, label)
+            f1_score = f1(labels, label)
+
             total_acc += (predicted_label.argmax(1) == label).sum().item()
             total_count += label.size(0)
 
     acc_result = total_acc / total_count
     print(f'prediction accuracy: {acc_result:.3f}')
 
+    # acc_score = accuracy.compute()
+    f1_score = f1.compute()
+    print(f"The F1 score is {f1_score}")
     return acc_result
 
 
