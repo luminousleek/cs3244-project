@@ -9,7 +9,7 @@ from torchtext.data.utils import get_tokenizer
 device = 'cpu'
 dataset_file = 'cleaned_job_postings.csv'
 model_file = 'model_weights.pth'
-vocab_file = 'vocab.txt'
+vocab_file = 'vocab.pyi'
 tokenizer = get_tokenizer('basic_english')
 dataset = split_data(dataset_file)
 
@@ -57,10 +57,7 @@ class TextClassificationModel(nn.Module):
 
 def save_model(model):
     torch.save(model[0], model_file)
-
-    with open(vocab_file, 'w+', encoding='utf-8') as f:
-        for token, index in model[1].get_stoi().items():
-            f.write(f'{index}\t{token}\n')
+    torch.save(model[1], vocab_file)
 
 
 def load_model():
@@ -68,15 +65,7 @@ def load_model():
         return None, None
 
     model = torch.load(model_file)
-    v_list = []
-    with open(vocab_file, 'r', encoding='utf-8') as f:
-        for line in f.readlines():
-            index, token = line.split('\t')
-            v_list.append(token.strip("\n"))
+    voc = torch.load(vocab_file)
 
-    def yield_vocab(vl):
-        yield vl
-
-    voc = build_vocab_from_iterator(yield_vocab(v_list))
     voc.set_default_index(voc["<unk>"])
     return model, voc

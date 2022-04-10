@@ -46,6 +46,31 @@ def evaluate(dataloader, model):
     return total_acc / total_count
 
 
+def predict_with_model(file_path, model, vocab, to_train=True):
+    model.eval()
+    if not exists(file_path):
+        print(f'{file_path} does not exists')
+        return None
+
+    predict_dataset = JobPostingDataSet(file_path)
+    dataloader = DataLoader(predict_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
+
+    total_acc, total_count = 0, 0
+    with torch.no_grad():
+        for label, text, offsets in dataloader:
+            predicted_label = model(text, offsets)
+            criterion(predicted_label, label)
+            total_acc += (predicted_label.argmax(1) == label).sum().item()
+            total_count += label.size(0)
+
+    acc_result = total_acc / total_count
+    print(f'prediction accuracy: {acc_result:.3f}')
+
+    if to_train:
+        model.train()
+    return acc_result
+
+
 def predict(file_path):
     model, vocab = initialise_model()
     if model is None:
@@ -89,7 +114,7 @@ def get_optimizer_scheduler(model):
     return optimizer, scheduler
 
 
-def train_valid_test(model, _train_dataloader, _valid_dataloader, _test_dataloader):
+def train_valid_test(model, _train_dataloader, _valid_dataloader, _test_dataloader, vocab):
     # perform one cycle of training (multiple batches), validation and test
     total_accu = 0
     optimizer, scheduler = get_optimizer_scheduler(model)
@@ -113,6 +138,7 @@ def train_valid_test(model, _train_dataloader, _valid_dataloader, _test_dataload
     accu_test = evaluate(_test_dataloader, model)
     print('test accuracy {:8.3f}'.format(accu_test))
 
+    predict_with_model('fake_postings_only.csv', model, vocab, True)
     return accu_test
 
 
@@ -150,7 +176,7 @@ def simple_trainer(dataset, to_save=False):
     valid_dataloader = DataLoader(split_valid_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
     test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
 
-    train_valid_test(model, train_dataloader, valid_dataloader, test_dataloader)
+    train_valid_test(model, train_dataloader, valid_dataloader, test_dataloader, vocab)
 
     if to_save:
         save_model((model, vocab))
@@ -162,7 +188,7 @@ def k_folds_trainer(dataset, k, to_save=False):
         return simple_trainer(dataset, to_save)
 
     f_ds, t_ds = dataset
-    ft_ratio = 1
+    ft_ratio = 5
     fold_size = int(len(f_ds) / k)
     f_rest, t_rest = len(f_ds) - fold_size * k, len(t_ds) - fold_size * k * ft_ratio
 
@@ -196,8 +222,9 @@ def k_folds_trainer(dataset, k, to_save=False):
         test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE,
                                      shuffle=True, collate_fn=collate_batch(vocab))
 
-        acc = train_valid_test(temp_model, train_dataloader, valid_dataloader, test_dataloader)
+        acc = train_valid_test(temp_model, train_dataloader, valid_dataloader, test_dataloader, vocab)
         max_model = max(max_model, (acc, temp_model, vocab), key=lambda x: x[0])
+        print(max_model[0])
 
     if to_save:
         save_model(max_model[1:])
@@ -210,7 +237,7 @@ em_size = 128
 job_label = {0: 'Real', 1: 'Fake'}
 
 # Hyperparameters
-EPOCHS = 10  # epoch
+EPOCHS = 20  # epoch
 LR = 5  # learning rate
 BATCH_SIZE = 64  # batch size for training
 test_ratio = 0.4
@@ -218,9 +245,10 @@ train_ratio = 0.8
 
 criterion = torch.nn.CrossEntropyLoss()
 
-k_folds_trainer(ds, k=30, to_save=True)
+# k_folds_trainer(ds, k=8, to_save=True)
 
+predict('scraped_predicted_1.csv')
 predict('fake_job_postings.csv')
+predict('random_sample.csv')
 predict('local_job_postings.csv')
 predict('fake_postings_only.csv')
-
