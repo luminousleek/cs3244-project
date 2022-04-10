@@ -10,6 +10,7 @@ import torchmetrics
 from dataset import JobPostingDataSet
 from model import collate_batch, dataset as ds, device, TextClassificationModel, save_model, load_model
 
+# at beginning of the script
 
 def train(dataloader, model, epoch):
     model.train()
@@ -43,6 +44,8 @@ def evaluate(dataloader, model):
         for idx, (label, text, offsets) in enumerate(dataloader):
             predicted_label = model(text, offsets)
             criterion(predicted_label, label)
+            # print("Predicted label: ", predicted_label.argmax(1))
+            # print('ground truth: ', label)
             total_acc += (predicted_label.argmax(1) == label).sum().item()
             total_count += label.size(0)
     return total_acc / total_count
@@ -61,13 +64,15 @@ def predict(file_path, model):
     total_acc, total_count = 0, 0
     with torch.no_grad():
         #accuracy = torchmetrics.Accuracy().to(torch.device("cuda", 0))
-        f1 = torchmetrics.F1Score().to(torch.device("cuda", 0))
+        f1 = torchmetrics.F1Score().to(device)
+        precision = torchmetrics.AveragePrecision().to(device)
         for label, text, offsets in dataloader:
             predicted_label = model(text, offsets)
             criterion(predicted_label, label)
-            labels = torch.argmax(predicted_label, 1)
+            predictions = torch.argmax(predicted_label, 1)
             #acc_score = accuracy(labels, label)
-            f1_score = f1(labels, label)
+            f1_score = f1(predictions, label)
+            prec_score = precision(predictions, label)
             total_acc += (predicted_label.argmax(1) == label).sum().item()
             total_count += label.size(0)
 
@@ -76,6 +81,8 @@ def predict(file_path, model):
     #acc_score = accuracy.compute()
     f1_score = f1.compute()
     print(f"The F1 score is {f1_score}")
+    prec_score = precision.compute()
+    print(f"The precision score is {prec_score}")
     return acc_result
 
 
@@ -111,6 +118,7 @@ def train_valid_test(model, _train_dataloader, _valid_dataloader, _test_dataload
               'valid accuracy {:8.3f} '.format(epoch,
                                                time.time() - epoch_start_time,
                                                accu_val))
+        print("\nPredictions: \n")
         print('-' * 59)
 
     print('Checking the results of test dataset.')
