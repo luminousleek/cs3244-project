@@ -10,6 +10,10 @@ import torchmetrics
 
 from model import collate_batch, dataset as ds, device, TextClassificationModel, save_model, load_model
 
+import wandb
+
+wandb.init(project="cs3244-project", entity="isaacleexj", config={})
+
 
 def train(dataloader, model, optimizer, epoch):
     model.train()
@@ -21,6 +25,7 @@ def train(dataloader, model, optimizer, epoch):
         optimizer.zero_grad()
         predicted_label = model(text, offsets)
         loss = criterion(predicted_label, label)
+        wandb.log({"loss": loss})
         loss.backward()
         torch.nn.utils.clip_grad_norm_(model.parameters(), 0.1)
         optimizer.step()
@@ -117,6 +122,7 @@ def predict(file_path):
     # acc_score = accuracy.compute()
     f1_score = f1.compute()
     print(f"The F1 score is {f1_score}")
+    wandb.log({"prediction accuracy:": acc_result})
     return acc_result
 
 
@@ -245,7 +251,7 @@ def k_folds_trainer(dataset, k, to_save=False):
 
         acc = train_valid_test(temp_model, train_dataloader, valid_dataloader, test_dataloader, vocab)
         max_model = max(max_model, (acc, temp_model, vocab), key=lambda x: x[0])
-        print(max_model[0])
+        wandb.log({"acc": acc, "fold": idx + 1})
 
     if to_save:
         save_model(max_model[1:])
@@ -255,15 +261,25 @@ def k_folds_trainer(dataset, k, to_save=False):
 num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
 em_size = 128
 
+
 job_label = {0: 'Real', 1: 'Fake'}
 
 # Hyperparameters
 EPOCHS = 20  # epoch
 LR = 5  # learning rate
+
 BATCH_SIZE = 64  # batch size for training
 test_ratio = 0.4
 train_ratio = 0.8
 
+wandb.config.update({
+  "data": "description",
+  "learning_rate": LR,
+  "epochs": EPOCHS,
+  "batch_size": BATCH_SIZE
+})
+
+# Model Training Functions
 criterion = torch.nn.CrossEntropyLoss()
 
 # k_folds_trainer(ds, k=8, to_save=True)
