@@ -49,6 +49,8 @@ class TextClassificationModel(nn.Module):
     def init_weights(self):
         initrange = 0.5
         self.embedding.weight.data.uniform_(-initrange, initrange)
+        self.fc.weight.data.uniform_(-initrange, initrange)
+        self.fc.bias.data.zero_()
 
     def forward(self, text, offsets):
         embedded = self.embedding(text, offsets)

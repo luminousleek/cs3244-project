@@ -121,7 +121,7 @@ def predict(file_path):
 
     # acc_score = accuracy.compute()
     f1_score = f1.compute()
-    print(f"The F1 score is {f1_score}")
+    # print(f"The F1 score is {f1_score}")
     wandb.log({"prediction accuracy:": acc_result})
     return acc_result
 
@@ -266,7 +266,7 @@ job_label = {0: 'Real', 1: 'Fake'}
 
 # Hyperparameters
 EPOCHS = 20  # epoch
-LR = 5  # learning rate
+LR = 3  # learning rate
 
 BATCH_SIZE = 64  # batch size for training
 test_ratio = 0.4
@@ -282,10 +282,9 @@ wandb.config.update({
 # Model Training Functions
 criterion = torch.nn.CrossEntropyLoss()
 
-# k_folds_trainer(ds, k=8, to_save=True)
+k_folds_trainer(ds, k=5, to_save=True)
 
 predict('scraped_predicted_1.csv')
 predict('fake_job_postings.csv')
 predict('random_sample.csv')
-predict('local_job_postings.csv')
 predict('fake_postings_only.csv')
