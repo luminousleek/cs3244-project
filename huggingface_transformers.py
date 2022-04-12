@@ -28,7 +28,7 @@ def compute_metrics(eval_pred):
 tokenized_df = dataset.map(preprocess_function, batched=True)
 data_collator = DataCollatorWithPadding(tokenizer=tokenizer)
 
-model = AutoModelForSequenceClassification.from_pretrained("./models", num_labels=2)
+model = AutoModelForSequenceClassification.from_pretrained("distilbert-base-uncased", num_labels=2)
 
 training_args = TrainingArguments(
     output_dir="./results",
