@@ -66,16 +66,12 @@ def predict_with_model(file_path, model, vocab, to_train=True):
 
     total_acc, total_count = 0, 0
     with torch.no_grad():
-        # accuracy = torchmetrics.Accuracy().to(torch.device("cuda", 0))
-        f1 = torchmetrics.F1Score().to(torch.device(TORCH_DEVICE, 0))
 
         for label, text, offsets in dataloader:
             predicted_label = model(text, offsets)
             criterion(predicted_label, label)
 
             labels = torch.argmax(predicted_label, 1)
-            # acc_score = accuracy(labels, label)
-            f1_score = f1(labels, label)
 
             total_acc += (predicted_label.argmax(1) == label).sum().item()
             total_count += label.size(0)
@@ -89,6 +85,7 @@ def predict_with_model(file_path, model, vocab, to_train=True):
 
 
 def predict(file_path):
+    print(f"dataset: {file_path}")
     model, vocab = initialise_model()
     if model is None:
         print('unable to load model')
@@ -103,27 +100,46 @@ def predict(file_path):
     dataloader = DataLoader(predict_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
 
     total_acc, total_count = 0, 0
+    true_pos, true_neg, false_pos, false_neg = 0, 0, 0, 0
     with torch.no_grad():
-        # accuracy = torchmetrics.Accuracy().to(torch.device("cuda", 0))
-        f1 = torchmetrics.F1Score().to(torch.device(TORCH_DEVICE, 0))
 
         for label, text, offsets in dataloader:
             predicted_label = model(text, offsets)
             criterion(predicted_label, label)
 
-            labels = torch.argmax(predicted_label, 1)
-            # acc_score = accuracy(labels, label)
-            f1_score = f1(labels, label)
+            pred_labels = predicted_label.argmax(1)
+            for pred, actual in zip(pred_labels, label):
+                if actual == 0:
+                    if pred == 0:
+                        true_neg += 1
+                    else:
+                        false_pos += 1
+                else:
+                    if pred == 0:
+                        false_neg += 1
+                    else:
+                        true_pos += 1
 
-            total_acc += (predicted_label.argmax(1) == label).sum().item()
+            total_acc += (pred_labels == label).sum().item()
             total_count += label.size(0)
 
     acc_result = total_acc / total_count
     print(f'prediction accuracy: {acc_result:.3f}')
 
-    # acc_score = accuracy.compute()
-    # f1_score = f1.compute()
+    # compute f1 score
+    if true_pos == 0 and false_pos == 0:
+        # model labelled everything as negative
+        f1_score = 0
+        print("model labelled everything as negative")
+    else:
+        precision = true_pos / (true_pos + false_pos)
+        recall = true_pos / (true_pos + false_neg)
+        f1_score = (2 * precision * recall) / (precision + recall)
+        print(f"precision: {precision}, recall: {recall}")
+
     print(f"The F1 score is {f1_score}")
+    print(f"true positives: {true_pos}, false negatives: {false_neg}")
+    print(f"false positives: {false_pos}, true negatives: {true_neg}")
     wandb.log({"prediction accuracy:": acc_result})
     wandb.log({f"prediction f1:": f1_score})
     return acc_result
@@ -263,7 +279,7 @@ def k_folds_trainer(dataset, k, to_save=False):
 # TextClassificationModel variables
 num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
 em_size = 128
-hidden_size = 50  # number of hidden units
+hidden_size = 100  # number of hidden units
 
 job_label = {0: 'Real', 1: 'Fake'}
 
