@@ -40,27 +40,30 @@ def collate_batch(vocab):
 
 
 class TextClassificationModel(nn.Module):
-    def __init__(self, vocab_size, embed_dim, hidden_size, num_class):
+    def __init__(self, vocab_size, embed_dim, num_class):
         super(TextClassificationModel, self).__init__()
         self.embedding = nn.EmbeddingBag(vocab_size, embed_dim, sparse=True)
-        self.fc1 = nn.Linear(embed_dim, hidden_size)
-        self.fc2 = nn.Linear(hidden_size, num_class)
+        self.fc = nn.Linear(embed_dim, num_class)
+        # self.fc1 = nn.Linear(embed_dim, hidden_size)
+        # self.fc2 = nn.Linear(hidden_size, num_class)
         self.init_weights()
 
     def init_weights(self):
         initrange = 0.5
         self.embedding.weight.data.uniform_(-initrange, initrange)
-        self.fc1.weight.data.uniform_(-initrange, initrange)
-        self.fc1.bias.data.zero_()
-        self.fc2.weight.data.uniform_(-initrange, initrange)
-        self.fc2.bias.data.zero_()
+        self.fc.weight.data.uniform_(-initrange, initrange)
+        self.fc.bias.data.zero_()
+        # self.fc1.weight.data.uniform_(-initrange, initrange)
+        # self.fc1.bias.data.zero_()
+        # self.fc2.weight.data.uniform_(-initrange, initrange)
+        # self.fc2.bias.data.zero_()
 
     def forward(self, text, offsets):
         result = self.embedding(text, offsets)
-        result = self.fc1(result)
-        result = F.relu(result)
-        result = self.fc2(result)
-        return result
+        # result = self.fc1(result)
+        # result = F.relu(result)
+        # result = self.fc2(result)
+        return self.fc(result)
 
 
 def save_model(model):

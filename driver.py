@@ -198,7 +198,7 @@ def initialise_model(vocab_size=None):
             return None, None
 
         print('new model created')
-        tc_model = TextClassificationModel(vocab_size, em_size, hidden_size, num_class)
+        tc_model = TextClassificationModel(vocab_size, em_size, num_class)
         vocab = None
     else:
         print('model loaded')
@@ -279,7 +279,7 @@ def k_folds_trainer(dataset, k, to_save=False):
 # TextClassificationModel variables
 num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
 em_size = 128
-hidden_size = 100  # number of hidden units
+# hidden_size = 10  # number of hidden units
 
 job_label = {0: 'Real', 1: 'Fake'}
 
@@ -297,7 +297,7 @@ wandb.config.update({
   "learning_rate": LR,
   "epochs": EPOCHS,
   "batch_size": BATCH_SIZE,
-  "hidden_units": hidden_size
+  # "hidden_units": hidden_size
 })
 
 # Model Training Functions
