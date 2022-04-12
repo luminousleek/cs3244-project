@@ -9,7 +9,7 @@ dataset_file = 'cleaned_job_postings.csv'
 model_file = 'model_weights.pth'
 vocab_file = 'vocab.pyi'
 tokenizer = get_tokenizer('basic_english')
-dataset = split_data(dataset_file)
+dataset = split_data(dataset_file, to_DS=True)
 
 
 def text_pipeline(text: str, vocab):

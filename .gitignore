@@ -140,3 +140,6 @@ dmypy.json
 # Pyre type checker
 .pyre/
 wandb/
+cache_dir/
+outputs/
+runs/

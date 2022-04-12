@@ -9,11 +9,15 @@ long_features = ['description']
 tokenizer = get_tokenizer('basic_english')
 
 
-def split_data(file_path):
+def split_data(file_path, to_DS=False):
     df = pandas.read_csv(file_path)
     fjp = df.copy(True).drop(df[df['fraudulent'] == 0].index)
     tjp = df.copy(True).drop(df[df['fraudulent'] == 1].index)
-    return JobPostingDataSet(dataset=fjp), JobPostingDataSet(dataset=tjp)
+
+    if to_DS:
+        fjp, tjp = JobPostingDataSet(dataset=fjp), JobPostingDataSet(dataset=tjp)
+
+    return fjp, tjp
 
 
 def format_boolean(value, dft):
@@ -33,6 +37,8 @@ def combine_descriptions(df):
     df['combined_description'] = df[['temp1', 'temp2'] + small_features].apply(
         lambda row: " ".join(row.values.astype(str)), axis=1)
     df.drop(['temp1', 'temp2'], axis=1, inplace=True)
+
+    return df
 
 
 class JobPostingDataSet(Dataset):

@@ -221,7 +221,7 @@ def k_folds_trainer(dataset, k, to_save=False):
         return simple_trainer(dataset, to_save)
 
     f_ds, t_ds = dataset
-    ft_ratio = int(len(t_ds) / len(f_ds))
+    ft_ratio = 5
     fold_size = int(len(f_ds) / k)
     f_rest, t_rest = len(f_ds) - fold_size * k, len(t_ds) - fold_size * k * ft_ratio
 
@@ -265,7 +265,7 @@ def k_folds_trainer(dataset, k, to_save=False):
 
 # TextClassificationModel variables
 num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
-em_size = 128
+em_size = 1024
 
 
 job_label = {0: 'Real', 1: 'Fake'}
@@ -288,7 +288,7 @@ wandb.config.update({
 # Model Training Functions
 criterion = torch.nn.CrossEntropyLoss()
 
-k_folds_trainer(ds, k=5, to_save=True)
+# k_folds_trainer(ds, k=5, to_save=True)
 
 predict('scraped_predicted_1.csv')
 predict('fake_job_postings.csv')
