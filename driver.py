@@ -14,6 +14,8 @@ import wandb
 
 wandb.init(project="cs3244-project", entity="isaacleexj", config={})
 
+TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
+
 
 def train(dataloader, model, optimizer, epoch):
     model.train()
@@ -65,7 +67,7 @@ def predict_with_model(file_path, model, vocab, to_train=True):
     total_acc, total_count = 0, 0
     with torch.no_grad():
         # accuracy = torchmetrics.Accuracy().to(torch.device("cuda", 0))
-        f1 = torchmetrics.F1Score().to(torch.device("cuda", 0))
+        f1 = torchmetrics.F1Score().to(torch.device(TORCH_DEVICE, 0))
 
         for label, text, offsets in dataloader:
             predicted_label = model(text, offsets)
@@ -103,7 +105,7 @@ def predict(file_path):
     total_acc, total_count = 0, 0
     with torch.no_grad():
         # accuracy = torchmetrics.Accuracy().to(torch.device("cuda", 0))
-        f1 = torchmetrics.F1Score().to(torch.device("cuda", 0))
+        f1 = torchmetrics.F1Score().to(torch.device(TORCH_DEVICE, 0))
 
         for label, text, offsets in dataloader:
             predicted_label = model(text, offsets)
@@ -120,9 +122,10 @@ def predict(file_path):
     print(f'prediction accuracy: {acc_result:.3f}')
 
     # acc_score = accuracy.compute()
-    f1_score = f1.compute()
-    # print(f"The F1 score is {f1_score}")
+    # f1_score = f1.compute()
+    print(f"The F1 score is {f1_score}")
     wandb.log({"prediction accuracy:": acc_result})
+    wandb.log({f"prediction f1:": f1_score})
     return acc_result
 
 
@@ -179,7 +182,7 @@ def initialise_model(vocab_size=None):
             return None, None
 
         print('new model created')
-        tc_model = TextClassificationModel(vocab_size, em_size, num_class)
+        tc_model = TextClassificationModel(vocab_size, em_size, hidden_size, num_class)
         vocab = None
     else:
         print('model loaded')
@@ -260,29 +263,31 @@ def k_folds_trainer(dataset, k, to_save=False):
 # TextClassificationModel variables
 num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
 em_size = 128
-
+hidden_size = 50  # number of hidden units
 
 job_label = {0: 'Real', 1: 'Fake'}
 
 # Hyperparameters
 EPOCHS = 20  # epoch
 LR = 3  # learning rate
+FOLDS = 5
 
 BATCH_SIZE = 64  # batch size for training
 test_ratio = 0.4
 train_ratio = 0.8
 
 wandb.config.update({
-  "data": "description",
+  "data": "combined_description",
   "learning_rate": LR,
   "epochs": EPOCHS,
-  "batch_size": BATCH_SIZE
+  "batch_size": BATCH_SIZE,
+  "hidden_units": hidden_size
 })
 
 # Model Training Functions
 criterion = torch.nn.CrossEntropyLoss()
 
-k_folds_trainer(ds, k=5, to_save=True)
+k_folds_trainer(ds, k=FOLDS, to_save=True)
 
 predict('scraped_predicted_1.csv')
 predict('fake_job_postings.csv')
