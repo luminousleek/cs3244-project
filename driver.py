@@ -8,9 +8,10 @@ from torch.utils.data import DataLoader, random_split, ConcatDataset
 from dataset import JobPostingDataSet, build_vocab
 import torchmetrics
 
-from model import collate_batch, dataset as ds, device, TextClassificationModel, save_model, load_model
+from model import collate_batch, dataset as ds, device, TextClassificationModel, save_model, load_model, text_pipeline
 
 import wandb
+# at beginning of the script
 
 wandb.init(project="cs3244-project", entity="isaacleexj", config={})
 
@@ -53,33 +54,33 @@ def evaluate(dataloader, model):
     return total_acc / total_count
 
 
-def predict_with_model(file_path, model, vocab, to_train=True):
+def predict_with_result(file_path, to_train=True):
+    model, vocab = initialise_model()
     model.eval()
     if not exists(file_path):
         print(f'{file_path} does not exists')
         return None
 
     predict_dataset = JobPostingDataSet(file_path)
-    dataloader = DataLoader(predict_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
 
     total_acc, total_count = 0, 0
     with torch.no_grad():
-        # accuracy = torchmetrics.Accuracy().to(torch.device("cuda", 0))
-        f1 = torchmetrics.F1Score().to(torch.device("cuda", 0))
+        for idx, (text, label) in enumerate(predict_dataset):
+            actual_label = int(label)
+            t_tensor = torch.tensor(text_pipeline(text, vocab)).to(device)
+            o_tensor = torch.tensor([0]).to(device)
+            predicted_label = model(t_tensor, o_tensor).argmax(1).item()
 
-        for label, text, offsets in dataloader:
-            predicted_label = model(text, offsets)
-            criterion(predicted_label, label)
-
-            labels = torch.argmax(predicted_label, 1)
-            # acc_score = accuracy(labels, label)
-            f1_score = f1(labels, label)
-
-            total_acc += (predicted_label.argmax(1) == label).sum().item()
-            total_count += label.size(0)
+            if actual_label == 1 or actual_label != predicted_label:
+                print(f'{idx}) actual/predicted:{actual_label}/{predicted_label}: {text}')
+            else:
+                total_acc += 1
+            total_count += 1
 
     acc_result = total_acc / total_count
     print(f'prediction accuracy: {acc_result:.3f}')
+
+    wandb.log({"prediction accuracy:": acc_result})
 
     if to_train:
         model.train()
@@ -97,21 +98,25 @@ def predict(file_path):
         print(f'{file_path} does not exists')
         return None
 
+    print(f'Prediction for {file_path}')
+
     predict_dataset = JobPostingDataSet(file_path)
     dataloader = DataLoader(predict_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
 
     total_acc, total_count = 0, 0
     with torch.no_grad():
         # accuracy = torchmetrics.Accuracy().to(torch.device("cuda", 0))
-        f1 = torchmetrics.F1Score().to(torch.device("cuda", 0))
+        f1 = torchmetrics.F1Score().to(device)
+        precision = torchmetrics.AveragePrecision().to(device)
 
         for label, text, offsets in dataloader:
             predicted_label = model(text, offsets)
             criterion(predicted_label, label)
-
-            labels = torch.argmax(predicted_label, 1)
+            predictions = torch.argmax(predicted_label, 1)
             # acc_score = accuracy(labels, label)
-            f1_score = f1(labels, label)
+
+            f1(predictions, label)
+            precision(predictions, label)
 
             total_acc += (predicted_label.argmax(1) == label).sum().item()
             total_count += label.size(0)
@@ -121,8 +126,10 @@ def predict(file_path):
 
     # acc_score = accuracy.compute()
     f1_score = f1.compute()
-    # print(f"The F1 score is {f1_score}")
     wandb.log({"prediction accuracy:": acc_result})
+    print(f"The F1 score is {f1_score}")
+    prec_score = precision.compute()
+    print(f"The precision score is {prec_score}\n")
     return acc_result
 
 
@@ -141,7 +148,7 @@ def get_optimizer_scheduler(model):
     return optimizer, scheduler
 
 
-def train_valid_test(model, _train_dataloader, _valid_dataloader, _test_dataloader, vocab):
+def train_valid_test(model, _train_dataloader, _valid_dataloader, _test_dataloader):
     # perform one cycle of training (multiple batches), validation and test
     total_accu = 0
     optimizer, scheduler = get_optimizer_scheduler(model)
@@ -165,7 +172,6 @@ def train_valid_test(model, _train_dataloader, _valid_dataloader, _test_dataload
     accu_test = evaluate(_test_dataloader, model)
     print('test accuracy {:8.3f}'.format(accu_test))
 
-    predict_with_model('fake_postings_only.csv', model, vocab, True)
     return accu_test
 
 
@@ -203,7 +209,7 @@ def simple_trainer(dataset, to_save=False):
     valid_dataloader = DataLoader(split_valid_, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
     test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
 
-    train_valid_test(model, train_dataloader, valid_dataloader, test_dataloader, vocab)
+    train_valid_test(model, train_dataloader, valid_dataloader, test_dataloader)
 
     if to_save:
         save_model((model, vocab))
@@ -215,7 +221,7 @@ def k_folds_trainer(dataset, k, to_save=False):
         return simple_trainer(dataset, to_save)
 
     f_ds, t_ds = dataset
-    ft_ratio = 5
+    ft_ratio = int(len(t_ds) / len(f_ds))
     fold_size = int(len(f_ds) / k)
     f_rest, t_rest = len(f_ds) - fold_size * k, len(t_ds) - fold_size * k * ft_ratio
 
@@ -249,7 +255,7 @@ def k_folds_trainer(dataset, k, to_save=False):
         test_dataloader = DataLoader(test_dataset, batch_size=BATCH_SIZE,
                                      shuffle=True, collate_fn=collate_batch(vocab))
 
-        acc = train_valid_test(temp_model, train_dataloader, valid_dataloader, test_dataloader, vocab)
+        acc = train_valid_test(temp_model, train_dataloader, valid_dataloader, test_dataloader)
         max_model = max(max_model, (acc, temp_model, vocab), key=lambda x: x[0])
         wandb.log({"acc": acc, "fold": idx + 1})
 
@@ -265,8 +271,8 @@ em_size = 128
 job_label = {0: 'Real', 1: 'Fake'}
 
 # Hyperparameters
-EPOCHS = 20  # epoch
-LR = 3  # learning rate
+EPOCHS = 10  # epoch
+LR = 5  # learning rate
 
 BATCH_SIZE = 64  # batch size for training
 test_ratio = 0.4

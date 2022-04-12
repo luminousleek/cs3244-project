@@ -1,9 +1,7 @@
 from os.path import exists
-import sys
 from torch import torch, nn
 
 from dataset import split_data
-from torchtext.vocab import build_vocab_from_iterator
 from torchtext.data.utils import get_tokenizer
 
 device = 'cpu'
@@ -42,7 +40,8 @@ def collate_batch(vocab):
 class TextClassificationModel(nn.Module):
     def __init__(self, vocab_size, embed_dim, num_class):
         super(TextClassificationModel, self).__init__()
-        self.embedding = nn.EmbeddingBag(vocab_size, embed_dim, sparse=True)
+        self.embedding = nn.EmbeddingBag(vocab_size * 10, embed_dim, sparse=True)
+        self.embedding.weight = self.embedding.weight
         self.fc = nn.Linear(embed_dim, num_class)
         self.init_weights()
 

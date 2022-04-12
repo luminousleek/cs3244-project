@@ -3,8 +3,8 @@ from torch.utils.data import Dataset
 from torchtext.data import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
-boolean_features = ['has_company_logo', 'has_questions']
-small_features = ['required_experience', 'required_education', 'function']
+boolean_features = {'has_company_logo': 0, 'has_questions': 1}
+small_features = ['required_experience', 'required_education', 'employment_type', 'industry', 'function']
 long_features = ['description']
 tokenizer = get_tokenizer('basic_english')
 
@@ -16,12 +16,22 @@ def split_data(file_path):
     return JobPostingDataSet(dataset=fjp), JobPostingDataSet(dataset=tjp)
 
 
+def format_boolean(value, dft):
+    try:
+        return str(int(value))
+    except ValueError:
+        return str(dft)
+
+
 def combine_descriptions(df):
-    df['temp1'] = df[boolean_features].apply(lambda row: "__".join(row.values.astype(str)), axis=1)
+    for feature, dft in boolean_features.items():
+        df[feature] = df[feature].apply(lambda x: format_boolean(x, dft))
+    df['temp1'] = df[boolean_features.keys()].apply(lambda row: "__".join(row.values.astype(str)), axis=1)
     df['temp2'] = ''
     for feature in long_features:
-        df['temp2'] = df['temp2'] + " " + df[feature].apply(lambda x: " ".join(str(x).split(" ")[:30]))
-    df['combined_description'] = df[['temp1', 'temp2'] + small_features].apply(lambda row: " ".join(row.values.astype(str)), axis=1)
+        df['temp2'] = df['temp2'] + " " + df[feature].apply(lambda x: " ".join(str(x).split(" ")[:100]))
+    df['combined_description'] = df[['temp1', 'temp2'] + small_features].apply(
+        lambda row: " ".join(row.values.astype(str)), axis=1)
     df.drop(['temp1', 'temp2'], axis=1, inplace=True)
 
 
