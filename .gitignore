@@ -9,6 +9,9 @@ __pycache__/
 # wandb folder
 wandb/
 
+# results folder
+results/
+
 # datasets
 *.csv
 
