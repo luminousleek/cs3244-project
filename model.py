@@ -1,6 +1,6 @@
 from os.path import exists
 from torch import torch, nn
-
+import torch.nn.functional as F
 from dataset import split_data
 from torchtext.data.utils import get_tokenizer
 
@@ -43,6 +43,8 @@ class TextClassificationModel(nn.Module):
         self.embedding = nn.EmbeddingBag(vocab_size * 10, embed_dim, sparse=True)
         self.embedding.weight = self.embedding.weight
         self.fc = nn.Linear(embed_dim, num_class)
+        # self.fc1 = nn.Linear(embed_dim, hidden_size)
+        # self.fc2 = nn.Linear(hidden_size, num_class)
         self.init_weights()
 
     def init_weights(self):
@@ -50,10 +52,17 @@ class TextClassificationModel(nn.Module):
         self.embedding.weight.data.uniform_(-initrange, initrange)
         self.fc.weight.data.uniform_(-initrange, initrange)
         self.fc.bias.data.zero_()
+        # self.fc1.weight.data.uniform_(-initrange, initrange)
+        # self.fc1.bias.data.zero_()
+        # self.fc2.weight.data.uniform_(-initrange, initrange)
+        # self.fc2.bias.data.zero_()
 
     def forward(self, text, offsets):
-        embedded = self.embedding(text, offsets)
-        return self.fc(embedded)
+        result = self.embedding(text, offsets)
+        # result = self.fc1(result)
+        # result = F.relu(result)
+        # result = self.fc2(result)
+        return self.fc(result)
 
 
 def save_model(model):

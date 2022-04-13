@@ -6,14 +6,16 @@ from torch import torch
 from torch.utils.data import DataLoader, random_split, ConcatDataset
 
 from dataset import JobPostingDataSet, build_vocab
-import torchmetrics
 
 from model import collate_batch, dataset as ds, device, TextClassificationModel, save_model, load_model, text_pipeline
 
 import wandb
+
 # at beginning of the script
 
 wandb.init(project="cs3244-project", entity="isaacleexj", config={})
+
+TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def train(dataloader, model, optimizer, epoch):
@@ -88,6 +90,7 @@ def predict_with_result(file_path, to_train=True):
 
 
 def predict(file_path):
+    print(f"dataset: {file_path}")
     model, vocab = initialise_model()
     if model is None:
         print('unable to load model')
@@ -104,32 +107,48 @@ def predict(file_path):
     dataloader = DataLoader(predict_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
 
     total_acc, total_count = 0, 0
+    true_pos, true_neg, false_pos, false_neg = 0, 0, 0, 0
     with torch.no_grad():
-        # accuracy = torchmetrics.Accuracy().to(torch.device("cuda", 0))
-        f1 = torchmetrics.F1Score().to(device)
-        precision = torchmetrics.AveragePrecision().to(device)
 
         for label, text, offsets in dataloader:
             predicted_label = model(text, offsets)
             criterion(predicted_label, label)
-            predictions = torch.argmax(predicted_label, 1)
-            # acc_score = accuracy(labels, label)
 
-            f1(predictions, label)
-            precision(predictions, label)
+            pred_labels = predicted_label.argmax(1)
+            for pred, actual in zip(pred_labels, label):
+                if actual == 0:
+                    if pred == 0:
+                        true_neg += 1
+                    else:
+                        false_pos += 1
+                else:
+                    if pred == 0:
+                        false_neg += 1
+                    else:
+                        true_pos += 1
 
-            total_acc += (predicted_label.argmax(1) == label).sum().item()
+            total_acc += (pred_labels == label).sum().item()
             total_count += label.size(0)
 
     acc_result = total_acc / total_count
     print(f'prediction accuracy: {acc_result:.3f}')
 
-    # acc_score = accuracy.compute()
-    f1_score = f1.compute()
-    wandb.log({"prediction accuracy:": acc_result})
+    # compute f1 score
+    if true_pos == 0 and false_pos == 0:
+        # model labelled everything as negative
+        f1_score = 0
+        print("model labelled everything as negative")
+    else:
+        precision = true_pos / (true_pos + false_pos)
+        recall = true_pos / (true_pos + false_neg)
+        f1_score = (2 * precision * recall) / (precision + recall)
+        print(f"precision: {precision}, recall: {recall}")
+
     print(f"The F1 score is {f1_score}")
-    prec_score = precision.compute()
-    print(f"The precision score is {prec_score}\n")
+    print(f"true positives: {true_pos}, false negatives: {false_neg}")
+    print(f"false positives: {false_pos}, true negatives: {true_neg}")
+    wandb.log({"prediction accuracy:": acc_result})
+    wandb.log({f"prediction f1:": f1_score})
     return acc_result
 
 
@@ -267,28 +286,29 @@ def k_folds_trainer(dataset, k, to_save=False):
 num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
 em_size = 1024
 
-
 job_label = {0: 'Real', 1: 'Fake'}
 
 # Hyperparameters
-EPOCHS = 10  # epoch
-LR = 5  # learning rate
+EPOCHS = 20  # epoch
+LR = 3  # learning rate
+FOLDS = 5
 
 BATCH_SIZE = 64  # batch size for training
 test_ratio = 0.4
 train_ratio = 0.8
 
 wandb.config.update({
-  "data": "description",
-  "learning_rate": LR,
-  "epochs": EPOCHS,
-  "batch_size": BATCH_SIZE
+    "data": "combined_description",
+    "learning_rate": LR,
+    "epochs": EPOCHS,
+    "batch_size": BATCH_SIZE,
+    # "hidden_units": hidden_size
 })
 
 # Model Training Functions
 criterion = torch.nn.CrossEntropyLoss()
 
-# k_folds_trainer(ds, k=5, to_save=True)
+k_folds_trainer(ds, k=FOLDS, to_save=True)
 
 predict('scraped_predicted_1.csv')
 predict('fake_job_postings.csv')
