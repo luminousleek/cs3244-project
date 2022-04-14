@@ -3,9 +3,10 @@ from torch.utils.data import Dataset
 from torchtext.data import get_tokenizer
 from torchtext.vocab import build_vocab_from_iterator
 
-boolean_features = {'has_company_logo': 0, 'has_questions': 1}
-small_features = ['required_experience', 'required_education', 'employment_type', 'industry', 'function']
-long_features = ['description']
+boolean_features = ['salary_range', 'has_company_logo', 'has_questions']
+small_features = ['title', 'location', 'required_experience', 'required_education', 'employment_type', 'industry',
+                  'function']
+long_features = ['description', 'company_profile', 'requirements', 'benefits']
 tokenizer = get_tokenizer('basic_english')
 
 
@@ -20,23 +21,34 @@ def split_data(file_path, to_DS=False):
     return fjp, tjp
 
 
-def format_boolean(value, dft):
+def format_boolean(value, dft: str):
     try:
-        return str(int(value))
+        int(value)
+        return ":".join([dft, str(value)])
     except ValueError:
-        return str(dft)
+        return ":".join([dft, "nan"])
+
+
+def format_string(string: str, dft: str):
+    if string == "nan" or string == "":
+        return ":".join([dft, "nan"])
+    return string
 
 
 def combine_descriptions(df):
-    for feature, dft in boolean_features.items():
-        df[feature] = df[feature].apply(lambda x: format_boolean(x, dft))
-    df['temp1'] = df[boolean_features.keys()].apply(lambda row: "__".join(row.values.astype(str)), axis=1)
-    df['temp2'] = ''
+    for feature in boolean_features:
+        df[feature] = df[feature].apply(lambda x: format_boolean(x, feature))
+
+    for feature in small_features + long_features:
+        df[feature] = df[feature].apply(lambda x: format_string(x, feature))
+
+    df['temp'] = ''
     for feature in long_features:
-        df['temp2'] = df['temp2'] + " " + df[feature].apply(lambda x: " ".join(str(x).split(" ")[:100]))
-    df['combined_description'] = df[['temp1', 'temp2'] + small_features].apply(
+        df['temp'] = df['temp'] + " " + df[feature].apply(lambda x: " ".join(str(x).split(" ")[:300]))
+
+    df['combined_description'] = df[boolean_features + small_features + ['temp']].apply(
         lambda row: " ".join(row.values.astype(str)), axis=1)
-    df.drop(['temp1', 'temp2'], axis=1, inplace=True)
+    df.drop(['temp'], axis=1, inplace=True)
 
     return df
 

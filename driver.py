@@ -10,12 +10,9 @@ from dataset import JobPostingDataSet, build_vocab
 from model import collate_batch, dataset as ds, device, TextClassificationModel, save_model, load_model, text_pipeline
 
 import wandb
-
 # at beginning of the script
 
 wandb.init(project="cs3244-project", entity="isaacleexj", config={})
-
-TORCH_DEVICE = "cuda" if torch.cuda.is_available() else "cpu"
 
 
 def train(dataloader, model, optimizer, epoch):
@@ -90,7 +87,7 @@ def predict_with_result(file_path, to_train=True):
 
 
 def predict(file_path):
-    print(f"dataset: {file_path}")
+    print(f"\ndataset: {file_path}")
     model, vocab = initialise_model()
     if model is None:
         print('unable to load model')
@@ -100,8 +97,6 @@ def predict(file_path):
     if not exists(file_path):
         print(f'{file_path} does not exists')
         return None
-
-    print(f'Prediction for {file_path}')
 
     predict_dataset = JobPostingDataSet(file_path)
     dataloader = DataLoader(predict_dataset, batch_size=BATCH_SIZE, shuffle=True, collate_fn=collate_batch(vocab))
@@ -134,10 +129,11 @@ def predict(file_path):
     print(f'prediction accuracy: {acc_result:.3f}')
 
     # compute f1 score
-    if true_pos == 0 and false_pos == 0:
-        # model labelled everything as negative
+    if true_pos == 0:
+        if false_pos == 0:
+            # model labelled everything as negative
+            print("model labelled everything as negative")
         f1_score = 0
-        print("model labelled everything as negative")
     else:
         precision = true_pos / (true_pos + false_pos)
         recall = true_pos / (true_pos + false_neg)
@@ -240,7 +236,7 @@ def k_folds_trainer(dataset, k, to_save=False):
         return simple_trainer(dataset, to_save)
 
     f_ds, t_ds = dataset
-    ft_ratio = 5
+    ft_ratio = 8
     fold_size = int(len(f_ds) / k)
     f_rest, t_rest = len(f_ds) - fold_size * k, len(t_ds) - fold_size * k * ft_ratio
 
@@ -284,13 +280,13 @@ def k_folds_trainer(dataset, k, to_save=False):
 
 # TextClassificationModel variables
 num_class = 2  # num of labels, (e.g. fraudulent variable only takes on two value)
-em_size = 1024
+em_size = 2048
 
 job_label = {0: 'Real', 1: 'Fake'}
 
 # Hyperparameters
-EPOCHS = 20  # epoch
-LR = 3  # learning rate
+EPOCHS = 10  # epoch
+LR = 5  # learning rate
 FOLDS = 5
 
 BATCH_SIZE = 64  # batch size for training
@@ -310,7 +306,5 @@ criterion = torch.nn.CrossEntropyLoss()
 
 k_folds_trainer(ds, k=FOLDS, to_save=True)
 
-predict('scraped_predicted_1.csv')
-predict('fake_job_postings.csv')
-predict('random_sample.csv')
-predict('fake_postings_only.csv')
+predict('local_job_postings.csv')
+predict('cleaned_job_postings.csv')
