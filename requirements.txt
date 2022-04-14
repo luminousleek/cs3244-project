@@ -1,5 +1,5 @@
 nltk==3.7
 pandas==1.4.1
-
+simpletransformers==0.63.6
 torch==1.11.0
 torchtext==0.12.0

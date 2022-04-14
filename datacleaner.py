@@ -16,29 +16,22 @@ def remove_punctuation_and_captalisation(text):
     return result
 
 
-def tokenise(text):
-    split = text.split(" ")
-    result = [word for word in split if not word.isspace() and word != '']
-    return result
-
-
 def remove_stop_words(text):
     split = text.split(" ")
     result = [word for word in split if word not in stopword]
-    result = ''.join(result)
+    result = ' '.join(result)
     return result
 
 
 def lemmatise(text):
     split = text.split(" ")
     result = list(map(lambda word: wn.lemmatize(word), split))
-    ' '.join(split)
+    result = ' '.join(result)
     return result
 
 
 def clean_text(t):
     t = remove_punctuation_and_captalisation(t)
-    # t = tokenise(t)
     t = remove_stop_words(t)
     t = lemmatise(t)
     return t
@@ -48,7 +41,6 @@ def process_location(t):
     # no removing stop words and lemmatise because might mess up data
     # e.g. "US" gets shortened to just "u"
     t = remove_punctuation_and_captalisation(t)
-    # t = tokenise(t)
     return t
 
 
@@ -68,6 +60,7 @@ def process_salary(df):
     df['salary'] = df['salary_range'].apply(lambda x: get_salary(x))
     df['start_salary'] = df['salary'].apply(lambda x: x.split("-")[0])
     df['end_salary'] = df['salary'].apply(lambda x: x.split("-")[1])
+    df.drop(['salary', 'salary_range'], axis=1, inplace=True)
 
 
 def get_salary(salary) -> str:
@@ -86,7 +79,6 @@ def get_salary(salary) -> str:
 
 def clean_df(df):
     for col in df:
-        # print(col)
         if col == 'location':
             df[col] = df[col].apply(lambda x: process_location(x))
         elif col == 'salary_range' or col in numerical_cols:
@@ -97,4 +89,4 @@ def clean_df(df):
 
 
 clean_df(job_posting)
-job_posting.to_csv('cleaned_job_postings.csv')
+job_posting.to_csv('cleaned_job_postings.csv', index=False)
